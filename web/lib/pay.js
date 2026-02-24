@@ -48,8 +48,12 @@ export function buildPaymentUrl({
   return `solana:${recipient}?${params.toString()}`;
 }
 
-export function getConnection(rpcUrl) {
-  return new Connection(rpcUrl, "confirmed");
+export function getConnection(rpcUrl, network = "devnet") {
+  const resolved =
+    rpcUrl && rpcUrl.startsWith("http")
+      ? rpcUrl
+      : clusterApiUrl(network || "devnet");
+  return new Connection(resolved, "confirmed");
 }
 
 export function parsePublicKey(value) {

@@ -14,6 +14,8 @@ export default function Monetization({ unlocked, onUnlock, onDownload }) {
   const [currency, setCurrency] = useState("SOL");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  const [signature, setSignature] = useState("");
+  const [sigChecking, setSigChecking] = useState(false);
 
   useEffect(() => {
     if (!payment?.paymentUrl) return;
@@ -102,6 +104,43 @@ export default function Monetization({ unlocked, onUnlock, onDownload }) {
       setTimeout(() => setCopied(""), 2000);
     } catch (err) {
       setError("复制失败，请手动复制");
+    }
+  };
+
+  const handleSignatureConfirm = async () => {
+    if (!signature) {
+      setError("请粘贴交易签名");
+      return;
+    }
+    setSigChecking(true);
+    setError("");
+    try {
+      const res = await fetch("/api/pay/confirm-signature", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signature,
+          currency,
+          amount: payment?.amount || 0,
+        }),
+      });
+      const json = await res.json();
+      if (json.status === "confirmed") {
+        setStatus("confirmed");
+        onUnlock();
+        setTimeout(() => setModalOpen(false), 1200);
+      } else if (json.status === "rpc_error") {
+        setStatus("rpc_error");
+        setError("RPC连接失败，请检查RPC配置");
+      } else if (json.status === "failed") {
+        setStatus("failed");
+      } else {
+        setStatus("timeout");
+      }
+    } catch (err) {
+      setError("签名校验失败，请重试");
+    } finally {
+      setSigChecking(false);
     }
   };
 
@@ -232,6 +271,26 @@ export default function Monetization({ unlocked, onUnlock, onDownload }) {
                 <p className="mt-2 break-all text-slate-400">
                   {payment.paymentUrl}
                 </p>
+                <div className="mt-4 border-t border-slate-800 pt-4">
+                  <p className="text-xs text-slate-400">
+                    若无法唤起钱包，可先手动转账，再粘贴交易签名确认解锁。
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <input
+                      className="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs text-slate-200 outline-none"
+                      placeholder="粘贴交易签名"
+                      value={signature}
+                      onChange={(event) => setSignature(event.target.value)}
+                    />
+                    <button
+                      className="rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-200"
+                      onClick={handleSignatureConfirm}
+                      disabled={sigChecking}
+                    >
+                      {sigChecking ? "校验中..." : "验证签名解锁"}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
             {statusText && (

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { PublicKey } from "@solana/web3.js";
 import { getPayConfig, getConnection } from "../../../../lib/pay";
 
 function parseUiAmount(tokenAmount) {
@@ -27,15 +26,16 @@ function readTokenDelta({ preBalances = [], postBalances = [], mint, owner }) {
   return postAmount - preAmount;
 }
 
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const reference = searchParams.get("reference");
-  const currency = (searchParams.get("currency") || "SOL").toUpperCase();
-  const amount = Number(searchParams.get("amount") || 0);
+export async function POST(request) {
+  const body = await request.json().catch(() => ({}));
+  const signature = body.signature;
+  const currency = (body.currency || "SOL").toUpperCase();
+  const amount = Number(body.amount || 0);
 
-  if (!reference) {
-    return NextResponse.json({ error: "缺少reference" }, { status: 400 });
+  if (!signature) {
+    return NextResponse.json({ error: "缺少签名" }, { status: 400 });
   }
+
   if (!amount || Number.isNaN(amount)) {
     return NextResponse.json({ error: "缺少金额" }, { status: 400 });
   }
@@ -52,25 +52,7 @@ export async function GET(request) {
   }
 
   const connection = getConnection(config.rpcUrl, config.network);
-  const referenceKey = new PublicKey(reference);
 
-  let signatures = [];
-  try {
-    signatures = await connection.getSignaturesForAddress(referenceKey, {
-      limit: 1,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { status: "rpc_error", error: "RPC连接失败" },
-      { status: 503 }
-    );
-  }
-
-  if (!signatures.length) {
-    return NextResponse.json({ status: "pending" });
-  }
-
-  const signature = signatures[0].signature;
   let tx = null;
   try {
     tx = await connection.getTransaction(signature, {
