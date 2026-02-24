@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { isValidSolanaAddress } from "../../../lib/solana";
-import { fetchHeliusAssets } from "../../../lib/apis/helius";
+import {
+  fetchHeliusAssets,
+  fetchSolBalance,
+  fetchRecentSignatures,
+  fetchParsedTransaction,
+} from "../../../lib/apis/helius";
 import { buildSummary } from "../../../lib/ai";
+import { fetchBirdeyePrice } from "../../../lib/apis/birdeye";
 
 const MEME_SYMBOLS = new Set(["WIF", "BONK", "POPCAT", "MYRO", "MEW"]);
 const STABLE_SYMBOLS = new Set(["USDC", "USDT", "DAI"]);
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 function mockResponse(address) {
   const distribution = [
@@ -54,6 +61,22 @@ function mockResponse(address) {
         changePct: null,
       },
     ],
+    nfts: [
+      {
+        name: "Mock NFT",
+        image: null,
+        collection: "Demo Collection",
+      },
+    ],
+    transactions: [
+      {
+        signature: "mock-signature",
+        status: "confirmed",
+        blockTime: new Date().toISOString(),
+        feeSol: 0.000005,
+        type: "Transfer",
+      },
+    ],
   };
 }
 
@@ -77,6 +100,7 @@ export async function GET(request) {
   }
 
   const heliusKey = process.env.HELIUS_API_KEY;
+  const birdeyeKey = process.env.BIRDEYE_API_KEY;
 
   try {
     if (!heliusKey) {
@@ -88,7 +112,25 @@ export async function GET(request) {
       return NextResponse.json(mock);
     }
 
-    const assets = await fetchHeliusAssets({ address, apiKey: heliusKey });
+    const [assets, solBalance, signatures] = await Promise.all([
+      fetchHeliusAssets({ address, apiKey: heliusKey }),
+      fetchSolBalance({ address, apiKey: heliusKey }),
+      fetchRecentSignatures({ address, apiKey: heliusKey, limit: 10 }),
+    ]);
+
+    const solPrice = birdeyeKey
+      ? await fetchBirdeyePrice({ apiKey: birdeyeKey, tokenAddress: SOL_MINT })
+      : 0;
+
+    const solToken = {
+      symbol: "SOL",
+      name: "Solana",
+      amount: solBalance,
+      priceUsd: solPrice || 0,
+      valueUsd: solBalance * (solPrice || 0),
+      changePct: null,
+    };
+
     const tokens = assets
       .filter((item) =>
         ["FungibleToken", "FungibleAsset"].includes(item.interface)
@@ -112,6 +154,45 @@ export async function GET(request) {
       })
       .filter((token) => token.amount > 0);
 
+    tokens.unshift(solToken);
+
+    const nfts = assets
+      .filter((item) => `${item.interface}`.includes("NFT"))
+      .map((item) => ({
+        name: item?.content?.metadata?.name || item?.name || "Unknown NFT",
+        image:
+          item?.content?.links?.image ||
+          item?.content?.files?.[0]?.uri ||
+          null,
+        collection:
+          item?.grouping?.[0]?.group_value ||
+          item?.content?.metadata?.collection?.name ||
+          null,
+      }))
+      .slice(0, 24);
+
+    const parsedTransactions = await Promise.all(
+      (signatures || []).map((sig) =>
+        fetchParsedTransaction({ signature: sig.signature, apiKey: heliusKey })
+      )
+    );
+
+    const transactions = (parsedTransactions || [])
+      .filter(Boolean)
+      .map((tx) => {
+        const status = tx.meta?.err ? "failed" : "confirmed";
+        const feeSol = tx.meta?.fee ? tx.meta.fee / 1e9 : null;
+        return {
+          signature: tx.transaction?.signatures?.[0] || "unknown",
+          status,
+          blockTime: tx.blockTime
+            ? new Date(tx.blockTime * 1000).toISOString()
+            : null,
+          feeSol,
+          type: "Transfer",
+        };
+      });
+
     const distributionMap = {
       SOL: 0,
       Stable: 0,
@@ -133,14 +214,17 @@ export async function GET(request) {
       value,
     }));
 
-    const totalValueUsd = tokens.reduce((sum, token) => sum + token.valueUsd, 0);
+    const totalValueUsd = tokens.reduce(
+      (sum, token) => sum + (token.valueUsd || 0),
+      0
+    );
 
     const overview = {
       totalValueUsd,
       pnlToday: null,
       pnlWeek: null,
       pnlMonth: null,
-      txCount: null,
+      txCount: signatures?.length ?? null,
     };
 
     const summary = buildSummary({ distribution, totalValueUsd });
@@ -151,6 +235,8 @@ export async function GET(request) {
       overview,
       distribution,
       tokens,
+      nfts,
+      transactions,
       summary,
     });
   } catch (error) {
