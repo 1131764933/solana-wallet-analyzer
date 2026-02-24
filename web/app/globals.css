@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --background: #05070f;
+  --foreground: #e2e8f0;
+  --panel: rgba(15, 23, 42, 0.8);
+  --panel-border: rgba(148, 163, 184, 0.2);
+  --accent: #35a7ff;
+  --accent-strong: #1d4ed8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+}
+
+body {
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 55%),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.2), transparent 50%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.glass-panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 20px 60px rgba(2, 6, 23, 0.6);
+  backdrop-filter: blur(14px);
+}
+
+.accent-text {
+  color: var(--accent);
+}
+
+.accent-border {
+  border-color: var(--accent);
+}
