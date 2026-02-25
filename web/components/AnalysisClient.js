@@ -9,6 +9,7 @@ import DetailTabs from "./DetailTabs";
 import AISummary from "./AISummary";
 import Monetization from "./Monetization";
 import ShareLink from "./ShareLink";
+import FeedbackBox from "./FeedbackBox";
 
 function buildDeepSummary({ distribution }) {
   if (!distribution || distribution.length === 0) return "";
@@ -239,7 +240,10 @@ export default function AnalysisClient({ address }) {
         onDownload={handleDownload}
       />
 
-      <ShareLink address={address} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ShareLink address={address} />
+        <FeedbackBox />
+      </div>
 
       {showSearch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
